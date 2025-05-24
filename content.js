@@ -140,3 +140,4 @@ window.addEventListener("load", () => {
     createSummarizeButton();
   }, 3000); // small delay to ensure page loaded
 });
+console.log("hie from content.js");
