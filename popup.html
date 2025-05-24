@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; padding: 10px; width: 250px; }
+    select, input, button { width: 100%; margin-top: 10px; padding: 5px; }
+  </style>
+</head>
+<body>
+  <h3>Settings</h3>
+  <label>Choose AI Platform:</label>
+  <select id="platform">
+    <option value="chatgpt">ChatGPT</option>
+    <option value="gemini">Gemini</option>
+    <option value="claude">Claude</option>
+  </select>
+
+  <label>Custom Prompt:</label>
+  <input type="text" id="prompt" placeholder="Summarize this YouTube video: [transcript]">
+
+  <button id="save">Save</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>
