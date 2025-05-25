@@ -1,25 +1,38 @@
-// Get transcript from YouTube transcript panel on the page (if available)
-function getTranscriptFromPage() {
-  const transcriptElems = document.querySelectorAll('#segments-container yt-formatted-string');
-  if (!transcriptElems.length) return null;
-
-  let transcript = "";
-  transcriptElems.forEach(elem => {
-    transcript += elem.innerText + " ";
-  });
-  return transcript.trim();
+function getVideoIdFromUrl() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get("v");
 }
 
-// Fetch transcript via YouTube timedtext API (fallback)
-async function fetchTranscript(videoId) {
-  if (!videoId) return null;
+async function fetchAvailableTranscriptLangs(videoId) {
   try {
-    const res = await fetch(`https://www.youtube.com/api/timedtext?lang=en&v=${videoId}`);
-    if (!res.ok) return null;
-    const xmlText = await res.text();
+    const url = `https://video.google.com/timedtext?type=list&v=${videoId}`;
+    const res = await fetch(url);
+    const xml = await res.text();
+
     const parser = new DOMParser();
-    const xml = parser.parseFromString(xmlText, "text/xml");
-    const texts = xml.getElementsByTagName("text");
+    const xmlDoc = parser.parseFromString(xml, "text/xml");
+    const tracks = xmlDoc.getElementsByTagName("track");
+
+    const langs = [];
+    for (let i = 0; i < tracks.length; i++) {
+      const lang = tracks[i].getAttribute("lang_code");
+      if (lang) langs.push(lang);
+    }
+    return langs;
+  } catch {
+    return [];
+  }
+}
+
+async function fetchTranscript(videoId, lang = "en") {
+  try {
+    const url = `https://video.google.com/timedtext?lang=${lang}&v=${videoId}`;
+    const res = await fetch(url);
+    const xml = await res.text();
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xml, "text/xml");
+    const texts = xmlDoc.getElementsByTagName("text");
 
     if (texts.length === 0) return null;
 
@@ -29,115 +42,102 @@ async function fetchTranscript(videoId) {
     }
 
     return transcript.trim();
-  } catch (err) {
-    console.error("Error fetching transcript:", err);
+  } catch {
     return null;
   }
 }
 
-// Get video ID from URL
-function getVideoIdFromUrl() {
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get("v");
+async function getTranscriptForVideo(videoId) {
+  const availableLangs = await fetchAvailableTranscriptLangs(videoId);
+  if (!availableLangs || availableLangs.length === 0) return null;
+
+  // Prefer English, otherwise use first available
+  const langToUse = availableLangs.includes("en") ? "en" : availableLangs[0];
+  return await fetchTranscript(videoId, langToUse);
 }
 
-// Unified transcript getter - first try page, then fallback
-async function getTranscript() {
-  let transcript = getTranscriptFromPage();
-  if (transcript) return transcript;
-
-  const videoId = getVideoIdFromUrl();
-  return await fetchTranscript(videoId);
-}
-
-// Create sidebar panel on right
-function createSidebar() {
-  if (document.getElementById("transcript-sidebar")) return;
+async function injectSidebar() {
+  if (document.getElementById("transcript-sidebar")) return; // avoid duplicates
 
   const sidebar = document.createElement("div");
   sidebar.id = "transcript-sidebar";
-  sidebar.className = "yt-transcript-sidebar";
-
-  // You can move styles to CSS file for cleaner code
   sidebar.style.position = "fixed";
-  sidebar.style.top = "0";
+  sidebar.style.top = "80px";
   sidebar.style.right = "0";
   sidebar.style.width = "320px";
-  sidebar.style.height = "100%";
-  sidebar.style.background = "#f9f9f9";
-  sidebar.style.borderLeft = "2px solid #ccc";
-  sidebar.style.padding = "10px";
+  sidebar.style.height = "80%";
+  sidebar.style.background = "#1e1e1e";  // dark background for contrast
+  sidebar.style.color = "#ff0000";       // red text as you requested
+  sidebar.style.borderLeft = "4px solid #ff0000";
+  sidebar.style.zIndex = "9999";
   sidebar.style.overflowY = "auto";
-  sidebar.style.zIndex = "2147483647";  // max z-index to stay on top
+  sidebar.style.padding = "15px";
+  sidebar.style.fontFamily = "'Roboto', sans-serif";
+  sidebar.style.fontSize = "14px";
+  sidebar.style.boxShadow = "0 0 15px rgba(255, 0, 0, 0.7)";
+  sidebar.style.borderRadius = "4px 0 0 4px";
+  sidebar.style.animation = "slideIn 0.5s ease forwards";
 
   sidebar.innerHTML = `
-    <h3 style="margin-top:0;">Transcript</h3>
-    <p id="transcript-text">Loading transcript...</p>
+    <h3 style="margin-top:0; color:#ff4444; font-weight:700; text-align:center;">Transcript</h3>
+    <div id="transcriptContainer" style="white-space: pre-wrap; line-height:1.5; margin-bottom: 15px;">Loading...</div>
+    <button id="summarizeBtn" style="
+      background: #ff0000;
+      color: #1e1e1e;
+      border: none;
+      padding: 10px;
+      width: 100%;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.3s ease;
+    ">Summarize</button>
+    <style>
+      @keyframes slideIn {
+        from { right: -350px; opacity: 0; }
+        to { right: 0; opacity: 1; }
+      }
+      #summarizeBtn:hover {
+        background: #cc0000;
+      }
+    </style>
   `;
 
   document.body.appendChild(sidebar);
 
-  getTranscript().then(transcript => {
-    document.getElementById("transcript-text").innerText =
-      transcript || "Transcript not available for this video.";
-  });
-}
+  const videoId = getVideoIdFromUrl();
+  const transcript = await getTranscriptForVideo(videoId);
+  const container = document.getElementById("transcriptContainer");
 
-// Create Summarize button next to sidebar
-function createSummarizeButton() {
-  if (document.getElementById("summarize-btn")) return;
+  if (transcript) {
+    container.innerText = transcript;
+  } else {
+    container.innerText = "Transcript not available.";
+  }
 
-  const button = document.createElement("button");
-  button.id = "summarize-btn";
-  button.className = "yt-summarize-btn";
-  button.innerText = "Summarize";
-
-  button.style.position = "fixed";
-  button.style.bottom = "20px";
-  button.style.right = "340px";  // next to sidebar
-  button.style.padding = "10px 15px";
-  button.style.backgroundColor = "#ff0000";
-  button.style.color = "white";
-  button.style.border = "none";
-  button.style.borderRadius = "5px";
-  button.style.cursor = "pointer";
-  button.style.zIndex = "2147483647";
-
-  button.onclick = () => {
-    const transcript = document.getElementById("transcript-text").innerText;
-    chrome.storage.local.get(["platform", "prompt"], (data) => {
-      const platform = data.platform || "chatgpt";
-      const promptTemplate = data.prompt || "Summarize this YouTube video: [transcript]";
-      const prompt = promptTemplate.replace("[transcript]", transcript);
-      const encodedPrompt = encodeURIComponent(prompt);
+  document.getElementById("summarizeBtn").addEventListener("click", () => {
+    chrome.storage.local.get(["aiTool", "prompt"], (data) => {
+      const { aiTool, prompt } = data;
+      const finalPrompt = prompt ? prompt.replace("[transcript]", transcript || "Transcript unavailable.") : transcript || "Transcript unavailable.";
 
       let url = "";
-      switch (platform) {
-        case "chatgpt":
-          url = `https://chat.openai.com/?q=${encodedPrompt}`;
-          break;
-        case "gemini":
-          url = `https://gemini.google.com/app?q=${encodedPrompt}`;
-          break;
-        case "claude":
-          url = `https://claude.ai/chat?q=${encodedPrompt}`;
-          break;
-        default:
-          url = `https://chat.openai.com/?q=${encodedPrompt}`;
+      if (aiTool === "chatgpt") {
+        url = `https://chat.openai.com/?prompt=${encodeURIComponent(finalPrompt)}`;
+      } else if (aiTool === "gemini") {
+        url = `https://gemini.google.com/app?prompt=${encodeURIComponent(finalPrompt)}`;
+      } else if (aiTool === "claude") {
+        url = `https://claude.ai/chat?prompt=${encodeURIComponent(finalPrompt)}`;
+      } else {
+        alert("Please select your AI tool in the extension settings.");
+        return;
       }
 
       window.open(url, "_blank");
     });
-  };
-
-  document.body.appendChild(button);
+  });
 }
 
-// Run after YouTube page loads
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    createSidebar();
-    createSummarizeButton();
-  }, 3000); // small delay to ensure page loaded
-});
-console.log("hie from content.js");
+// Only inject sidebar on YouTube video pages
+if (window.location.href.includes("youtube.com/watch")) {
+  injectSidebar();
+}

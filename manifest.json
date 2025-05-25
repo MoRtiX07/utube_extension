@@ -2,21 +2,22 @@
   "manifest_version": 3,
   "name": "YouTube Transcript Summarizer",
   "version": "1.0",
-  "description": "Displays video transcripts and summarizes them using your favorite AI platform.",
-  "permissions": [
-    "storage"
-  ],
-  "host_permissions": [
-    "https://www.youtube.com/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
-      "css": ["style.css"]
-    }
-  ],
+  "description": "Summarize YouTube videos using ChatGPT, Gemini, or Claude.",
+  "permissions": ["storage", "scripting", "tabs"],
+  "host_permissions": ["*://www.youtube.com/*"],
   "action": {
     "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+ "content_scripts": [
+  {
+    "matches": ["*://www.youtube.com/watch*"],
+    "js": ["content.js"],
+    "css": ["style.css"],
+    "run_at": "document_idle"
   }
+]
+
 }
